@@ -3,7 +3,7 @@ package storage;
 import java.util.ArrayList;
 import java.util.Map.Entry;
 
-public class bPlusNode {
+public class bPlusNode <K extends Comparable<K>, V> {
     // 是否为叶子节点
     protected boolean isLeaf;
 
@@ -11,31 +11,36 @@ public class bPlusNode {
     protected boolean isRoot;
 
     // 父节点
-    protected bPlusNode parent;
+    protected bPlusNode<K, V> parent;
 
     // 叶节点的前驱节点
-    protected bPlusNode previous;
+    protected bPlusNode<K, V> previous;
 
     // 叶节点的后继节点
-    protected bPlusNode next;
+    protected bPlusNode<K, V> next;
 
     // 叶节点的数据 / 非叶节点的索引值。这俩都叫关键字
-    protected ArrayList<Entry<Comparable, Object>> entries;
+    protected ArrayList<Entry<K, V>> entries;
 
     // 子节点
-    protected ArrayList<bPlusNode> children;
+    protected ArrayList<bPlusNode<K, V>> children;
 
     public bPlusNode(boolean isLeaf) {
         this.isLeaf = isLeaf;
-        entries = new ArrayList<Entry<Comparable, Object>>();
+        entries = new ArrayList<Entry<K, V>>();
 
         // 如果不是叶子节点，需要初始化自己的孩子节点
         if (!isLeaf) {
-            children = new ArrayList<bPlusNode>();
+            children = new ArrayList<bPlusNode<K, V>>();
         }
     }
 
-    public Object get(Comparable key) {
+    public bPlusNode(boolean isLeaf, boolean isRoot) {
+        this(isLeaf);
+        this.isRoot = isRoot;
+    }
+
+    public V get(K key) {
         // 如果是叶子节点，这个叶子节点上存储了要查找的数据
         if (isLeaf) {
             // 二分查找
@@ -89,5 +94,13 @@ public class bPlusNode {
                 return children.get(low).get(key);
             }
         }
+    }
+
+    public V remove(K key, bPlusTree<K, V> tree) {
+        return null;
+    }
+
+    public void insertOrUpdate(K key, V value, bPlusTree<K, V> tree) {
+
     }
 }
