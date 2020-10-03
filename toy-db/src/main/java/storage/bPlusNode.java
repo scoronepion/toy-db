@@ -108,15 +108,15 @@ public class bPlusNode <K extends Comparable<K>, V> {
                 while (low <= high) {
                     mid = (low + high) / 2;
                     comp = key.compareTo(entries.get(mid).getKey());
-                    // 找到了
                     if (comp == 0) {
+                        // 找到了
                         // mid + 1是因为children长度比entries多1，所以下标要偏移1
                         return children.get(mid + 1).get(key);
-                    // key比mid还要大，左边界收缩
                     } else if (comp > 0) {
+                        // key比mid还要大，左边界收缩
                         low = mid + 1;
-                    // key比mid小，右边界收缩
                     } else {
+                        // key比mid小，右边界收缩
                         high = mid - 1;
                     }
                 }
@@ -215,10 +215,66 @@ public class bPlusNode <K extends Comparable<K>, V> {
                 // 删除当前节点孩子节点
                 children = null;
 
-                // TODO 检查父节点是否需要更新
+                // 检查父节点是否需要更新
+                parent.updateInsert(tree);
                 // 删除父节点
                 parent = null;
+            } else {
+                // 如果是根节点
+                // 根节点标识置false
+                isRoot = false;
+                // 新建根节点
+                bPlusNode<K, V> parent = new bPlusNode<K, V>(false, true);
+                tree.setRoot(parent);
+                tree.setHeight(tree.getHeight() + 1);
+                left.parent = parent;
+                right.parent = parent;
+                parent.children.add(left);
+                parent.children.add(right);
+                // 将right的第一个关键字上升到父节点关键字数组中，作为索引
+                parent.entries.add(right.entries.get(0));
+                // 删除当前节点关键字
+                entries = null;
+                // 删除当前节点孩子节点
+                children = null;
             }
+            return;
+        } else {
+            // 不是叶子节点，那就要先找到在哪里插入，逻辑与get相似
+            // 如果key比当前节点最左边（第一个index）的key还小，那就沿着最左边的子节点（第一个节点）继续找。为什么没有等于？因为相等的都被分到了右边
+            if (key.compareTo(entries.get(0).getKey()) < 0) {
+                children.get(0).insertOrUpdate(key, value, tree);
+                // 如果key比当前节点最右边（最后一个index）的key还大，那就沿着最右边的子节点（最后一个节点）继续找
+            } else if (key.compareTo(entries.get(entries.size() - 1).getKey()) >= 0) {
+                children.get(children.size() - 1).insertOrUpdate(key, value, tree);
+                // 沿着比key大的前一个entry对应的子节点
+            } else {
+                // 二分查找
+                int low = 0, high = entries.size() - 1, mid;
+                int comp;
+                while (low <= high) {
+                    mid = (low + high) / 2;
+                    comp = key.compareTo(entries.get(mid).getKey());
+                    if (comp == 0) {
+                        // 找到了
+                        // mid + 1是因为children长度比entries多1，所以下标要偏移1
+                        children.get(mid + 1).insertOrUpdate(key, value, tree);
+                        break;
+                    } else if (comp > 0) {
+                        // key比mid还要大，左边界收缩
+                        low = mid + 1;
+                    } else {
+                        // key比mid小，右边界收缩
+                        high = mid - 1;
+                    }
+                }
+                if (low > high) {
+                    // 为什么这里又是low？因为如果上面二分查找没找到的话，low正好对在第一个大于key的entry上
+                    // 所以对应到children里面，下标就应该是 (low - 1) + 1 = low，low - 1表示比key大的前一个entry，+1表示对应到children里的下标
+                    children.get(low).insertOrUpdate(key, value, tree);
+                }
+            }
+            return;
         }
     }
 
@@ -257,6 +313,85 @@ public class bPlusNode <K extends Comparable<K>, V> {
         // 如果此时还未插入，说明目标kv应该插入right的最后一个位置
         if (!inserted) {
             right.entries.add(new AbstractMap.SimpleEntry<K, V>(key, value));
+        }
+    }
+
+    // 插入节点后父节点的更新（主要判断是否要分裂）
+    protected void updateInsert(bPlusTree<K, V> tree) {
+        // 判断是否要分裂
+        if (children.size() < tree.getOrder()) {
+            return;
+        }
+
+        // 分裂成左右两个节点
+        bPlusNode<K, V> left = new bPlusNode<K, V>(false);
+        bPlusNode<K, V> right = new bPlusNode<K, V>(false);
+        // 分配左右节点的长度，逻辑同copy2Nodes
+        int leftSize = (tree.getOrder() + 1) / 2 + (tree.getOrder() + 1) % 2;
+        int rightSize = (tree.getOrder() + 1) / 2;
+        // 分配孩子节点
+        for (int i = 0; i < leftSize; i++) {
+            left.children.add(children.get(i));
+            children.get(i).parent = left;
+        }
+        for (int i = 0; i < rightSize; i++) {
+            right.children.add(children.get(leftSize + i));
+            children.get(leftSize + i).parent = right;
+        }
+        // 分配关键字，下面的代码会把leftSize - 1这个索引的内容空出来
+        // leftSize - 1 这个关键字要升到上一层当索引
+        for (int i = 0; i < leftSize - 1; i++) {
+            left.entries.add(entries.get(i));
+        }
+        for (int i = 0; i < rightSize - 1; i++) {
+            right.entries.add(entries.get(leftSize + i));
+        }
+
+        // 如果不是根节点
+        if (parent != null) {
+            // 获取当前节点在父节点的孩子数组中的下标
+            int index = parent.children.indexOf(this);
+            // 从父节点的孩子数组中删掉自己
+            parent.children.remove(this);
+            // left节点父亲指向当前的父节点
+            left.parent = parent;
+            // right节点父亲指向当前父节点
+            right.parent = parent;
+            // 父节点孩子数组中，index下标处插入left
+            parent.children.add(index, left);
+            // 父节点孩子数组中，index + 1下标处插入right
+            parent.children.add(index + 1, right);
+            // 将leftSize - 1上升到父节点关键字数组中，作为索引
+            parent.entries.add(index, entries.get(leftSize - 1));
+            // 删除当前节点关键字
+            entries = null;
+            // 删除当前节点孩子节点
+            children = null;
+
+            // 检查父节点是否需要更新
+            parent.updateInsert(tree);
+            // 删除父节点
+            parent = null;
+        } else {
+            // 如果是根节点
+            // 首先root标识置为false
+            isRoot = false;
+            // 新建root节点
+            bPlusNode<K, V> parent = new bPlusNode<K, V>(false, true);
+            // 设置为tree的root
+            tree.setRoot(parent);
+            // 树高加一
+            tree.setHeight(tree.getHeight() + 1);
+            // 设置孩子节点的父节点
+            left.parent = parent;
+            right.parent = parent;
+            parent.children.add(left);
+            parent.children.add(right);
+            parent.entries.add(entries.get(leftSize - 1));
+            // 删除当前节点关键字
+            entries = null;
+            // 删除当前节点孩子节点
+            children = null;
         }
     }
 }
